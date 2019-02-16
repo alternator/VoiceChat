@@ -1,0 +1,17 @@
+{
+    "name": "ICKX.VoiceChat.Runtime",
+    "references": [
+        "Unity.Networking.Transport",
+        "Unity.Collections",
+        "ICKX.Common.Runtime",
+        "ICKX.Radome.Runtime"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": []
+}
