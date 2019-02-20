@@ -5,7 +5,7 @@
 	"description": "Project ICKX Voice Chat Library",
 	"dependencies": {
 		"com.unity.collections": ">0.0.9",
-		"jp.ickx.common": "*",
-		"jp.ickx.radome": "*"
+		"jp.ickx.common": ">0.0.1",
+		"jp.ickx.radome": ">0.0.1"
 	}
 }
