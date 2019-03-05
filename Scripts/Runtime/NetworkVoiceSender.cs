@@ -118,7 +118,7 @@ namespace ICKX.VoiceChat {
 			ushort dataLen = (ushort)length;
 			int dataSize = (4 / (int)Mathf.Pow (2, _BitDepthCompressionLevel)) * dataLen;
 
-			if (dataSize + packetLen > NetworkLinkerPool.MTU) {
+			if (dataSize + packetLen > NetworkParameterConstants.MTU) {
 				Debug.LogWarning ("Voiceデータが大きすぎるため送れないデータがあります \n " +
 					"CompressionLevelを大きくするか,マイク入力のサンプル数を小さくしてください");
 				dataLen = (ushort)(250 * Mathf.Pow (2, _BitDepthCompressionLevel));
@@ -167,9 +167,7 @@ namespace ICKX.VoiceChat {
 				}else {
 					//TODO
 					//Server-Clientモデルなら任意のプレイヤーへ送る判定をサーバー側で行いたい.
-					for (int i=0;i<TargetPlayerList.Length;i++) {
-						GamePacketManager.Send (TargetPlayerList[i], sendVoicePacket, QosType.Unreliable, true);
-					}
+					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, QosType.Unreliable);
 				}
 				sendVoicePacket.Dispose ();
 				rawVoiceData.Dispose ();
