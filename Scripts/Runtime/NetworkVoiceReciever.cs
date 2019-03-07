@@ -44,6 +44,7 @@ namespace ICKX.VoiceChat {
 				ushort playerId = stream.ReadUShort (ref ctx);
 				ushort samplingFrequency = stream.ReadUShort (ref ctx);
 				byte bitDepthCompressionLevel = stream.ReadByte (ref ctx);
+				float maxVolume = stream.ReadFloat (ref ctx);
 
 				Vector3 senderPosition = default;
 				switch (mode) {
@@ -63,7 +64,7 @@ namespace ICKX.VoiceChat {
 				}
 
 				source.CacheTransform.position = senderPosition;
-				source.OnRecievePacket (mode, dataCount, samplingFrequency, bitDepthCompressionLevel, stream, ctx);
+				source.OnRecievePacket (mode, dataCount, samplingFrequency, bitDepthCompressionLevel, maxVolume, stream, ctx);
 			}
 		}
 

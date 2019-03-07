@@ -64,6 +64,9 @@ namespace ICKX.VoiceChat {
 		[Range (0, 2)]
 		[SerializeField]
 		private int _BitDepthCompressionLevel = 2;
+		[Range (0.0f, 1.0f)]
+		[SerializeField]
+		private float _MaxVolume = 1.0f;
 
 		public NativeList<ushort> TargetPlayerList { get; set; }
 
@@ -105,7 +108,7 @@ namespace ICKX.VoiceChat {
 
 			Vector3 senderPosition = cacheTransform.position;
 
-			int packetLen = 11;
+			int packetLen = 15;
 			switch (SendVoiceMode) {
 				case VoiceMode.Default:
 					break;
@@ -132,6 +135,7 @@ namespace ICKX.VoiceChat {
 			sendVoicePacket.Write (GamePacketManager.PlayerId);
 			sendVoicePacket.Write ((ushort)_MicrophoneReciever.SamplingFrequency);
 			sendVoicePacket.Write ((byte)_BitDepthCompressionLevel);
+			sendVoicePacket.Write (_MaxVolume);
 			switch (SendVoiceMode) {
 				case VoiceMode.Default:
 					break;
@@ -148,6 +152,7 @@ namespace ICKX.VoiceChat {
 
 			var compressJob = new CompressJob () {
 				bitDepthCompressionLevel = _BitDepthCompressionLevel,
+				maxVolume = _MaxVolume,
 				rawVoiceData = rawVoiceData,
 				rawVoiceDataLength = dataLen,
 				sendVoicePacket = sendVoicePacket,
@@ -174,29 +179,33 @@ namespace ICKX.VoiceChat {
 
 		struct CompressJob : IJob {
 			public int bitDepthCompressionLevel;
+			public float maxVolume;
 
 			public NativeArray<float> rawVoiceData;
 			public int rawVoiceDataLength;
 			public DataStreamWriter sendVoicePacket;
 
 			public void Execute () {
-
+				float invMaxVolume = 1.0f / maxVolume;
 				switch (bitDepthCompressionLevel) {
 					case 0:
 						for (int i = 0; i < rawVoiceDataLength; i++) {
-							sendVoicePacket.Write (rawVoiceData[i]);
+							float value = Mathf.Clamp (rawVoiceData[i] * invMaxVolume, -1.0f, 1.0f);
+							sendVoicePacket.Write (value);
 						}
 						break;
 					case 1:
 						float alphaShort = 1.0f / Mathf.Log (short.MaxValue) * (short.MaxValue - 1);
 						for (int i = 0; i < rawVoiceDataLength; i++) {
-							sendVoicePacket.Write ((short)MuLawCompression.MuLaw (rawVoiceData[i], short.MaxValue - 1, alphaShort));
+							float value = Mathf.Clamp (rawVoiceData[i] * invMaxVolume, -1.0f, 1.0f);
+							sendVoicePacket.Write ((short)MuLawCompression.MuLaw (value, short.MaxValue - 1, alphaShort));
 						}
 						break;
 					case 2:
 						float alphaByte = 1.0f / Mathf.Log (128) * 127;
 						for (int i = 0; i < rawVoiceDataLength; i++) {
-							sendVoicePacket.Write ((byte)(MuLawCompression.MuLaw (rawVoiceData[i], 127, alphaByte) + 127));
+							float value = Mathf.Clamp (rawVoiceData[i] * invMaxVolume, -1.0f, 1.0f);
+							sendVoicePacket.Write ((byte)(MuLawCompression.MuLaw (value, 127, alphaByte) + 127));
 						}
 						break;
 					default:

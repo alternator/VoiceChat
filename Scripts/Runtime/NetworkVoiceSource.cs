@@ -26,6 +26,7 @@ namespace ICKX.VoiceChat {
 
 		public ushort SamplingFrequency { get; private set; }
 		public byte BitDepthCompressionLevel { get; private set; }
+		public float MaxVolume { get; private set; }
 		public Transform CacheTransform { get; private set; }
 		public AudioSource CacheAudioSource { get; private set; }
 
@@ -58,7 +59,7 @@ namespace ICKX.VoiceChat {
 
 		//updateの前に呼ばれる
 		internal void OnRecievePacket (VoiceMode mode, ushort dataCount
-				, ushort samplingFrequency, byte compressionLevel, DataStreamReader stream, DataStreamReader.Context ctx) {
+				, ushort samplingFrequency, byte compressionLevel, float maxVolume, DataStreamReader stream, DataStreamReader.Context ctx) {
 
 			if (SamplingFrequency != samplingFrequency) {
 				SamplingFrequency = samplingFrequency;
@@ -67,6 +68,9 @@ namespace ICKX.VoiceChat {
 			if (BitDepthCompressionLevel != compressionLevel) {
 				BitDepthCompressionLevel = compressionLevel;
 				_RecieveVoiceBufferLastPos = 0;
+			}
+			if(MaxVolume != maxVolume) {
+				MaxVolume = maxVolume;
 			}
 
 			if (Mode != mode) {
@@ -119,7 +123,7 @@ namespace ICKX.VoiceChat {
 						case 0:
 							for (int i = 0; i < data.DataCount; i++) {
 								_RecieveVoiceBufferLastPos++;
-								_RecieveVoiceBuffer[_RecieveVoiceBufferLastPos] = (reader.ReadFloat (ref ctx));
+								_RecieveVoiceBuffer[_RecieveVoiceBufferLastPos] = (reader.ReadFloat (ref ctx)) * MaxVolume;
 							}
 							break;
 						case 1:
@@ -127,7 +131,7 @@ namespace ICKX.VoiceChat {
 							for (int i = 0; i < data.DataCount; i++) {
 								_RecieveVoiceBufferLastPos++;
 								_RecieveVoiceBuffer[_RecieveVoiceBufferLastPos] 
-									= (MuLawCompression.InvMuLaw (reader.ReadShort (ref ctx), short.MaxValue - 1, invShort));
+									= (MuLawCompression.InvMuLaw (reader.ReadShort (ref ctx), short.MaxValue - 1, invShort)) * MaxVolume;
 							}
 							break;
 						case 2:
@@ -135,7 +139,7 @@ namespace ICKX.VoiceChat {
 							for (int i = 0; i < data.DataCount; i++) {
 								_RecieveVoiceBufferLastPos++;
 								_RecieveVoiceBuffer[_RecieveVoiceBufferLastPos]
-									= (MuLawCompression.InvMuLaw (((short)reader.ReadByte (ref ctx) - 127), 127, invByte));
+									= (MuLawCompression.InvMuLaw (((short)reader.ReadByte (ref ctx) - 127), 127, invByte)) * MaxVolume;
 							}
 							break;
 						default:
