@@ -113,7 +113,7 @@ namespace ICKX.VoiceChat {
 				foreach (var data in dataList) {
 					if (!data.StreamCopy.IsCreated) continue;
 
-					if (_RecieveVoiceBufferLastPos + data.DataCount + 1024 > _RecieveVoiceBuffer.Length) {
+					while (_RecieveVoiceBufferLastPos + data.DataCount + 1024 > _RecieveVoiceBuffer.Length) {
 						System.Array.Resize (ref _RecieveVoiceBuffer, _RecieveVoiceBuffer.Length * 2);
 					}
 
@@ -172,7 +172,7 @@ namespace ICKX.VoiceChat {
 				dataList.Clear ();
 
 				isWriting = true;
-				if (_FilterVoiceBuffer.Length <= _RecieveVoiceBufferLastPos + _FilterVoiceBufferLastPos) {
+				while (_FilterVoiceBuffer.Length <= _RecieveVoiceBufferLastPos + _FilterVoiceBufferLastPos) {
 					System.Array.Resize (ref _FilterVoiceBuffer, _FilterVoiceBuffer.Length * 2);
 				}
 				System.Array.Copy (_RecieveVoiceBuffer, 0, _FilterVoiceBuffer, _FilterVoiceBufferLastPos, _RecieveVoiceBufferLastPos);
@@ -218,13 +218,15 @@ namespace ICKX.VoiceChat {
 				}
 			}
 
-			if (_CopyBuffer.Length < useRecieveVoiceDataSize) {
+			while (_CopyBuffer.Length < useRecieveVoiceDataSize) {
 				System.Array.Resize (ref _CopyBuffer, _CopyBuffer.Length * 2);
 			}
 
 			for (int i = 0; i < _FilterVoiceBufferLastPos; i += useRecieveVoiceDataSize) {
-				System.Array.Copy (_FilterVoiceBuffer, useRecieveVoiceDataSize + i, _CopyBuffer, 0, useRecieveVoiceDataSize);
-				System.Array.Copy (_CopyBuffer, 0, _FilterVoiceBuffer, i, useRecieveVoiceDataSize);
+				if(_FilterVoiceBuffer.Length >= i + useRecieveVoiceDataSize * 2) {
+					System.Array.Copy (_FilterVoiceBuffer, useRecieveVoiceDataSize + i, _CopyBuffer, 0, useRecieveVoiceDataSize);
+					System.Array.Copy (_CopyBuffer, 0, _FilterVoiceBuffer, i, useRecieveVoiceDataSize);
+				}
 			}
 
 			_FilterVoiceBufferLastPos -= useRecieveVoiceDataSize;
