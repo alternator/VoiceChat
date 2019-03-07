@@ -126,7 +126,7 @@ namespace ICKX.VoiceChat {
 			}
 			packetLen += dataSize;
 
-			sendVoicePacket = new DataStreamWriter (packetLen, Allocator.Persistent);
+			sendVoicePacket = new DataStreamWriter (packetLen, Allocator.TempJob);
 			sendVoicePacket.Write (VoiceSenderPacketType);
 			sendVoicePacket.Write ((byte)SendVoiceMode);
 			sendVoicePacket.Write (GamePacketManager.PlayerId);
@@ -140,7 +140,7 @@ namespace ICKX.VoiceChat {
 					sendVoicePacket.Write (senderPosition);
 					break;
 			}
-			sendVoicePacket.Write (length);
+			sendVoicePacket.Write (dataLen);
 
 			//Debug.Log ($"{SendVoiceMode} : {length} : {_FrequencyCompressionLevel} : {_BitDepthCompressionLevel}");
 
@@ -165,8 +165,6 @@ namespace ICKX.VoiceChat {
 					//Debug.Log ("sendVoicePacket : " + sendVoicePacket.Length);
 					GamePacketManager.Brodcast (sendVoicePacket, QosType.Unreliable, true);
 				}else {
-					//TODO
-					//Server-Clientモデルなら任意のプレイヤーへ送る判定をサーバー側で行いたい.
 					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, QosType.Unreliable);
 				}
 				sendVoicePacket.Dispose ();
