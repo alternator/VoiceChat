@@ -106,6 +106,8 @@ namespace ICKX.VoiceChat {
 				return;
 			}
 
+
+
 			Vector3 senderPosition = cacheTransform.position;
 
 			int packetLen = 15;
@@ -168,9 +170,9 @@ namespace ICKX.VoiceChat {
 			if (sendVoicePacket.IsCreated && sendVoicePacket.Length != 0) {
 				if(TargetPlayerList.Length == 0) {
 					//Debug.Log ("sendVoicePacket : " + sendVoicePacket.Length);
-					GamePacketManager.Brodcast (sendVoicePacket, QosType.Unreliable, true);
+					GamePacketManager.Brodcast (sendVoicePacket, QosType.Reliable, true);
 				}else {
-					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, QosType.Unreliable);
+					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, QosType.Reliable);
 				}
 				sendVoicePacket.Dispose ();
 				rawVoiceData.Dispose ();
