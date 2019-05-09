@@ -170,9 +170,9 @@ namespace ICKX.VoiceChat {
 			if (sendVoicePacket.IsCreated && sendVoicePacket.Length != 0) {
 				if(TargetPlayerList.Length == 0) {
 					//Debug.Log ("sendVoicePacket : " + sendVoicePacket.Length);
-					GamePacketManager.Brodcast (sendVoicePacket, QosType.Reliable, true);
+					GamePacketManager.Brodcast (sendVoicePacket, QosType.Unreliable, true);
 				}else {
-					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, QosType.Reliable);
+					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, QosType.Unreliable);
 				}
 				sendVoicePacket.Dispose ();
 				rawVoiceData.Dispose ();
