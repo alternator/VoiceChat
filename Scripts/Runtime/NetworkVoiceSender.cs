@@ -106,8 +106,6 @@ namespace ICKX.VoiceChat {
 				return;
 			}
 
-
-
 			Vector3 senderPosition = cacheTransform.position;
 
 			int packetLen = 15;
@@ -124,8 +122,8 @@ namespace ICKX.VoiceChat {
 			int dataSize = (4 / (int)Mathf.Pow (2, _BitDepthCompressionLevel)) * dataLen;
 
 			if (dataSize + packetLen > NetworkParameterConstants.MTU) {
-				Debug.LogWarning ("Voiceデータが大きすぎるため送れないデータがあります \n " +
-					"CompressionLevelを大きくするか,マイク入力のサンプル数を小さくしてください");
+				//Debug.LogWarning ("Voiceデータが大きすぎるため送れないデータがあります \n " +
+				//	"CompressionLevelを大きくするか,マイク入力のサンプル数を小さくしてください");
 				dataLen = (ushort)(250 * Mathf.Pow (2, _BitDepthCompressionLevel));
 				dataSize = 1000;
 			}
@@ -148,7 +146,7 @@ namespace ICKX.VoiceChat {
 			}
 			sendVoicePacket.Write (dataLen);
 
-			//Debug.Log ($"{SendVoiceMode} : {length} : {_FrequencyCompressionLevel} : {_BitDepthCompressionLevel}");
+			//Debug.Log ($"{SendVoiceMode} : {length} : {_MaxVolume} : {_BitDepthCompressionLevel}");
 
 			rawVoiceData = new NativeArray<float> (readOnlyData, Allocator.TempJob);
 

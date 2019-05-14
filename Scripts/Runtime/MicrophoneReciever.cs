@@ -63,6 +63,7 @@ namespace ICKX.VoiceChat {
             if (_MicrophoneClip == null) return;
 
             var position = Microphone.GetPosition (null);
+            if (position > _SamplingFrequency) position = _SamplingFrequency;
 
 			if (position < 0 || _PrevPosition > SamplingFrequency || position > SamplingFrequency)
             {
@@ -86,7 +87,7 @@ namespace ICKX.VoiceChat {
                 length = position - _PrevPosition;
                 if (length > _ProcessBuffer.Length) {
 					Debug.Log ("Resize _ProcessBuffer : " + length);
-					System.Array.Resize (ref _ProcessBuffer, length);
+					System.Array.Resize (ref _ProcessBuffer, _ProcessBuffer.Length * 2);
 					//length = _ProcessBuffer.Length;
 					//_PrevPosition = position - _ProcessBuffer.Length;
 				}
@@ -95,7 +96,7 @@ namespace ICKX.VoiceChat {
 				length = position + (SamplingFrequency - _PrevPosition);
                 if (length > _ProcessBuffer.Length) {
 					Debug.Log ("Resize _ProcessBuffer : " + length);
-					System.Array.Resize (ref _ProcessBuffer, length);
+					System.Array.Resize (ref _ProcessBuffer, _ProcessBuffer.Length * 2);
 					//length = _ProcessBuffer.Length;
 					//_PrevPosition = position - _ProcessBuffer.Length;
 					//if(_PrevPosition < 0)_PrevPosition += SamplingFrequency;
@@ -122,7 +123,7 @@ namespace ICKX.VoiceChat {
             //Debug.Log("Mic Ave Value : " + ave);
 
 			if (_MicAverageLog.Any(a=>a > _MicThreshold)) {
-				OnUpdateMicData?.Invoke (_ProcessBuffer, length, _SamplingFrequency);
+                OnUpdateMicData?.Invoke (_ProcessBuffer, length, _SamplingFrequency);
 			}
 
 			_PrevPosition = position;

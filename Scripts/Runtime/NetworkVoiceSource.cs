@@ -145,7 +145,10 @@ namespace ICKX.VoiceChat {
 						default:
 							throw new System.NotImplementedException ();
 					}
-				}
+
+                    _RecieveVoiceBuffer[_RecieveVoiceBufferLastPos] -= Mathf.Sign(_RecieveVoiceBuffer[_RecieveVoiceBufferLastPos]) * 0.05f;
+
+                }
 			});
 		}
 
