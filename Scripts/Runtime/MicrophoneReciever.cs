@@ -72,11 +72,12 @@ namespace ICKX.VoiceChat {
 				return;
             }
 
-            if (_PrevPosition - position > _SamplingFrequency * 0.5f)
-            {
-                _PrevPosition = position;
-                return;
-            }
+            //if (_PrevPosition - position > _SamplingFrequency * 0.5f)
+            //{
+            //    Debug.Log($"Microphone position {position}");
+            //    _PrevPosition = position;
+            //    return;
+            //}
 
             int length = 0;
 			if (position == _PrevPosition)
@@ -87,7 +88,7 @@ namespace ICKX.VoiceChat {
                 length = position - _PrevPosition;
                 if (length > _ProcessBuffer.Length) {
 					Debug.Log ("Resize _ProcessBuffer : " + length);
-					System.Array.Resize (ref _ProcessBuffer, _ProcessBuffer.Length * 2);
+					System.Array.Resize (ref _ProcessBuffer, length);
 					//length = _ProcessBuffer.Length;
 					//_PrevPosition = position - _ProcessBuffer.Length;
 				}
@@ -96,17 +97,17 @@ namespace ICKX.VoiceChat {
 				length = position + (SamplingFrequency - _PrevPosition);
                 if (length > _ProcessBuffer.Length) {
 					Debug.Log ("Resize _ProcessBuffer : " + length);
-					System.Array.Resize (ref _ProcessBuffer, _ProcessBuffer.Length * 2);
+					System.Array.Resize (ref _ProcessBuffer, length);
 					//length = _ProcessBuffer.Length;
 					//_PrevPosition = position - _ProcessBuffer.Length;
 					//if(_PrevPosition < 0)_PrevPosition += SamplingFrequency;
 				}
-				//未処理のデータが_clipの後半に格納されているので、分割して読み込む
-				_MicrophoneClip.GetData (_ProcessBuffer, _PrevPosition);
-				if (_PrevPosition > position) {
-					_MicrophoneClip.GetData (_SubProcessBuffer, 0);
+                //未処理のデータが_clipの後半に格納されているので、分割して読み込む
+                _MicrophoneClip.GetData (_ProcessBuffer, _PrevPosition);
+				if (_PrevPosition > position && _SubProcessBuffer.Length > position) {
+                    _MicrophoneClip.GetData (_SubProcessBuffer, 0);
 					System.Array.Copy (_SubProcessBuffer, 0, _ProcessBuffer, (SamplingFrequency - _PrevPosition), position);
-				}
+                }
             }
 
             float ave = 0.0f;
@@ -117,7 +118,7 @@ namespace ICKX.VoiceChat {
 
 			for (int i = _MicAverageLog.Length - 1; i > 0; i--) {
 				_MicAverageLog[i] = _MicAverageLog[i-1];
-			}
+            }
 			_MicAverageLog[0] = ave;
 
             //Debug.Log("Mic Ave Value : " + ave);

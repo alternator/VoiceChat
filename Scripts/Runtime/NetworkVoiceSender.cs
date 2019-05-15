@@ -56,7 +56,8 @@ namespace ICKX.VoiceChat {
 
 		[SerializeField]
 		private MicrophoneReciever _MicrophoneReciever;
-
+        [SerializeField]
+        private QosType _QosType = QosType.Unreliable;
 		[SerializeField]
 		private VoiceMode _SendVoiceMode;
 
@@ -108,7 +109,7 @@ namespace ICKX.VoiceChat {
 
 			Vector3 senderPosition = cacheTransform.position;
 
-			int packetLen = 15;
+			int packetLen = 19;
 			switch (SendVoiceMode) {
 				case VoiceMode.Default:
 					break;
@@ -124,8 +125,8 @@ namespace ICKX.VoiceChat {
 			if (dataSize + packetLen > NetworkParameterConstants.MTU) {
 				//Debug.LogWarning ("Voiceデータが大きすぎるため送れないデータがあります \n " +
 				//	"CompressionLevelを大きくするか,マイク入力のサンプル数を小さくしてください");
-				dataLen = (ushort)(250 * Mathf.Pow (2, _BitDepthCompressionLevel));
-				dataSize = 1000;
+				dataLen = (ushort)(300 * Mathf.Pow (2, _BitDepthCompressionLevel));
+				dataSize = 1200;
 			}
 			packetLen += dataSize;
 
@@ -144,6 +145,7 @@ namespace ICKX.VoiceChat {
 					sendVoicePacket.Write (senderPosition);
 					break;
 			}
+            sendVoicePacket.Write(GamePacketManager.progressTimeSinceStartup);
 			sendVoicePacket.Write (dataLen);
 
 			//Debug.Log ($"{SendVoiceMode} : {length} : {_MaxVolume} : {_BitDepthCompressionLevel}");
@@ -168,9 +170,9 @@ namespace ICKX.VoiceChat {
 			if (sendVoicePacket.IsCreated && sendVoicePacket.Length != 0) {
 				if(TargetPlayerList.Length == 0) {
 					//Debug.Log ("sendVoicePacket : " + sendVoicePacket.Length);
-					GamePacketManager.Brodcast (sendVoicePacket, QosType.Unreliable, true);
+					GamePacketManager.Brodcast (sendVoicePacket, _QosType, true);
 				}else {
-					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, QosType.Unreliable);
+					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, _QosType);
 				}
 				sendVoicePacket.Dispose ();
 				rawVoiceData.Dispose ();
