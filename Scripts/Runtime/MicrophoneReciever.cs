@@ -109,14 +109,15 @@ namespace ICKX.VoiceChat {
 					System.Array.Copy (_SubProcessBuffer, 0, _ProcessBuffer, (SamplingFrequency - _PrevPosition), position);
                 }
             }
-
+            int i = 0;
             float ave = 0.0f;
-			for (int i=0;i<_ProcessBuffer.Length;i++) {
+			for (i=0;i< length; i+=5) {
 				ave += Mathf.Abs( _ProcessBuffer[i]);
 			}
-			ave /= _ProcessBuffer.Length;
+			ave /= i;
 
-			for (int i = _MicAverageLog.Length - 1; i > 0; i--) {
+            i = 0;
+			for (i = _MicAverageLog.Length - 1; i > 0; i--) {
 				_MicAverageLog[i] = _MicAverageLog[i-1];
             }
 			_MicAverageLog[0] = ave;
