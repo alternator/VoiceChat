@@ -123,8 +123,17 @@ namespace ICKX.VoiceChat {
 			_MicAverageLog[0] = ave;
 
             //Debug.Log("Mic Ave Value : " + ave);
+            i = 0;
+            bool isAny = false;
+            for (i = 0; i < _MicAverageLog.Length; i++)
+            {
+                if (_MicAverageLog[i] > _MicThreshold)
+                {
+                    isAny = true;
+                }
+            }
 
-			if (_MicAverageLog.Any(a=>a > _MicThreshold)) {
+			if (isAny) {
                 OnUpdateMicData?.Invoke (_ProcessBuffer, length, _SamplingFrequency);
 			}
 
