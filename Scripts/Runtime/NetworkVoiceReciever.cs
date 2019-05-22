@@ -37,7 +37,7 @@ namespace ICKX.VoiceChat {
 		}
 
 		//updateの前に呼ばれる
-		private void OnRecievePacket (ushort senderPlayerId, byte type, DataStreamReader stream, DataStreamReader.Context ctx) {
+		private void OnRecievePacket (ushort senderPlayerId, ulong senderUniqueId, byte type, DataStreamReader stream, DataStreamReader.Context ctx) {
 			//Debug.Log ("OnRecievePacket : " + type);
 			if (type == NetworkVoiceSender.VoiceSenderPacketType) {
 				var mode = (VoiceMode)stream.ReadByte (ref ctx);

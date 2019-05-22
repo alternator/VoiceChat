@@ -102,7 +102,7 @@ namespace ICKX.VoiceChat {
 		//Updateのタイミングで呼ばれる
 		private void OnUpdateMicData (float[] readOnlyData, int length, int samplingFrequency) {
 
-			if(GamePacketManager.NetworkManager == null || GamePacketManager.NetworkManager.state != NetworkManagerBase.State.Online) {
+			if(GamePacketManager.NetworkManager == null || GamePacketManager.NetworkManager.NetwrokState != NetworkConnection.State.Connected) {
 				return;
 			}
 
