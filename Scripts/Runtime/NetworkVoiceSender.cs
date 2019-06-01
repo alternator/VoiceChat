@@ -56,7 +56,8 @@ namespace ICKX.VoiceChat {
 
 		[SerializeField]
 		private MicrophoneReciever _MicrophoneReciever;
-
+        [SerializeField]
+        private QosType _QosType = QosType.Unreliable;
 		[SerializeField]
 		private VoiceMode _SendVoiceMode;
 
@@ -106,11 +107,9 @@ namespace ICKX.VoiceChat {
 				return;
 			}
 
-
-
 			Vector3 senderPosition = cacheTransform.position;
 
-			int packetLen = 15;
+			int packetLen = 19;
 			switch (SendVoiceMode) {
 				case VoiceMode.Default:
 					break;
@@ -124,10 +123,10 @@ namespace ICKX.VoiceChat {
 			int dataSize = (4 / (int)Mathf.Pow (2, _BitDepthCompressionLevel)) * dataLen;
 
 			if (dataSize + packetLen > NetworkParameterConstants.MTU) {
-				Debug.LogWarning ("Voiceデータが大きすぎるため送れないデータがあります \n " +
-					"CompressionLevelを大きくするか,マイク入力のサンプル数を小さくしてください");
-				dataLen = (ushort)(250 * Mathf.Pow (2, _BitDepthCompressionLevel));
-				dataSize = 1000;
+				//Debug.LogWarning ("Voiceデータが大きすぎるため送れないデータがあります \n " +
+				//	"CompressionLevelを大きくするか,マイク入力のサンプル数を小さくしてください");
+				dataLen = (ushort)(300 * Mathf.Pow (2, _BitDepthCompressionLevel));
+				dataSize = 1200;
 			}
 			packetLen += dataSize;
 
@@ -146,9 +145,10 @@ namespace ICKX.VoiceChat {
 					sendVoicePacket.Write (senderPosition);
 					break;
 			}
+            sendVoicePacket.Write(GamePacketManager.progressTimeSinceStartup);
 			sendVoicePacket.Write (dataLen);
 
-			//Debug.Log ($"{SendVoiceMode} : {length} : {_FrequencyCompressionLevel} : {_BitDepthCompressionLevel}");
+			//Debug.Log ($"{SendVoiceMode} : {length} : {_MaxVolume} : {_BitDepthCompressionLevel}");
 
 			rawVoiceData = new NativeArray<float> (readOnlyData, Allocator.TempJob);
 
@@ -170,9 +170,9 @@ namespace ICKX.VoiceChat {
 			if (sendVoicePacket.IsCreated && sendVoicePacket.Length != 0) {
 				if(TargetPlayerList.Length == 0) {
 					//Debug.Log ("sendVoicePacket : " + sendVoicePacket.Length);
-					GamePacketManager.Brodcast (sendVoicePacket, QosType.Reliable, true);
+					GamePacketManager.Brodcast (sendVoicePacket, _QosType, true);
 				}else {
-					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, QosType.Reliable);
+					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, _QosType);
 				}
 				sendVoicePacket.Dispose ();
 				rawVoiceData.Dispose ();

@@ -22,7 +22,7 @@ namespace ICKX.VoiceChat {
 
 		private float[] _ProcessBuffer;
 		private float[] _SubProcessBuffer;
-		private AudioClip _MicrophoneClip;
+		private AudioClip _MicrophoneClip = null;
 
 		private float[] _MicAverageLog; 
 
@@ -32,35 +32,61 @@ namespace ICKX.VoiceChat {
 
 		public event OnRecieveMicDataEvent OnUpdateMicData = null;
 
-		void Start () {
+		IEnumerator Start ()
+        {
+            while (Microphone.devices == null || Microphone.devices.Length == 0)
+            {
+                Debug.Log($"Microphone null");
+                yield return new WaitForSeconds(1.0f);
+            }
 
-			_MicrophoneClip = Microphone.Start (null, true, 1, _SamplingFrequency);
+            _MicrophoneClip = Microphone.Start (null, true, 1, _SamplingFrequency);
 
 			//44100x1sで880, 22050x1sで440ほどPositionが移動する.ので50Hzぐらいで更新している様子
 			//フレーム落ちで2倍の量移動することがあるので、それでも記録できる程度に
 			_ProcessBuffer = new float[_ProcessBufferSize];
 			_SubProcessBuffer = new float[_ProcessBufferSize];
 			_MicAverageLog = new float[_MicSuspendFrame];
-		}
 
-		void Update () {
-			var position = Microphone.GetPosition (null);
-			if (position < 0 || _PrevPosition > SamplingFrequency || position > SamplingFrequency) {
-				_PrevPosition = position;
-				return;
-			}
-			if (Mathf.Abs (_PrevPosition - position) > _SamplingFrequency / 30) {
-				_PrevPosition = position;
-				return;
-			}
+            yield return new WaitForSeconds(1.0f);
 
-			int length = 0;
-			if (position == _PrevPosition) {
-				//何もしない
+
+            foreach (var dev in Microphone.devices)
+            {
+                Microphone.GetDeviceCaps(dev, out int min, out int max);
+                Debug.Log($"Microphone {dev}, min={min} max={max} IsRecording={Microphone.IsRecording(dev)}");
+            }
+        }
+
+        void Update ()
+        {
+            if (_MicrophoneClip == null) return;
+
+            var position = Microphone.GetPosition (null);
+            if (position > _SamplingFrequency) position = _SamplingFrequency;
+
+			if (position < 0 || _PrevPosition > SamplingFrequency || position > SamplingFrequency)
+            {
+                Debug.Log($"Microphone position {position}");
+                _PrevPosition = position;
 				return;
+            }
+
+            //if (_PrevPosition - position > _SamplingFrequency * 0.5f)
+            //{
+            //    Debug.Log($"Microphone position {position}");
+            //    _PrevPosition = position;
+            //    return;
+            //}
+
+            int length = 0;
+			if (position == _PrevPosition)
+            {
+                //何もしない
+                return;
 			} else if (position > _PrevPosition) {
-				length = position - _PrevPosition;
-				if (length > _ProcessBuffer.Length) {
+                length = position - _PrevPosition;
+                if (length > _ProcessBuffer.Length) {
 					Debug.Log ("Resize _ProcessBuffer : " + length);
 					System.Array.Resize (ref _ProcessBuffer, length);
 					//length = _ProcessBuffer.Length;
@@ -69,34 +95,46 @@ namespace ICKX.VoiceChat {
 				_MicrophoneClip.GetData (_ProcessBuffer, _PrevPosition);
 			} else {
 				length = position + (SamplingFrequency - _PrevPosition);
-				if (length > _ProcessBuffer.Length) {
+                if (length > _ProcessBuffer.Length) {
 					Debug.Log ("Resize _ProcessBuffer : " + length);
 					System.Array.Resize (ref _ProcessBuffer, length);
 					//length = _ProcessBuffer.Length;
 					//_PrevPosition = position - _ProcessBuffer.Length;
 					//if(_PrevPosition < 0)_PrevPosition += SamplingFrequency;
 				}
-				//未処理のデータが_clipの後半に格納されているので、分割して読み込む
-				_MicrophoneClip.GetData (_ProcessBuffer, _PrevPosition);
-				if (_PrevPosition > position) {
-					_MicrophoneClip.GetData (_SubProcessBuffer, 0);
+                //未処理のデータが_clipの後半に格納されているので、分割して読み込む
+                _MicrophoneClip.GetData (_ProcessBuffer, _PrevPosition);
+				if (_PrevPosition > position && _SubProcessBuffer.Length > position) {
+                    _MicrophoneClip.GetData (_SubProcessBuffer, 0);
 					System.Array.Copy (_SubProcessBuffer, 0, _ProcessBuffer, (SamplingFrequency - _PrevPosition), position);
-				}
-			}
-
-			float ave = 0.0f;
-			for (int i=0;i<_ProcessBuffer.Length;i++) {
+                }
+            }
+            int i = 0;
+            float ave = 0.0f;
+			for (i=0;i< length; i+=5) {
 				ave += Mathf.Abs( _ProcessBuffer[i]);
 			}
-			ave /= _ProcessBuffer.Length;
+			ave /= i;
 
-			for (int i = _MicAverageLog.Length - 1; i > 0; i--) {
+            i = 0;
+			for (i = _MicAverageLog.Length - 1; i > 0; i--) {
 				_MicAverageLog[i] = _MicAverageLog[i-1];
-			}
+            }
 			_MicAverageLog[0] = ave;
 
-			if (_MicAverageLog.Any(a=>a > _MicThreshold)) {
-				OnUpdateMicData?.Invoke (_ProcessBuffer, length, _SamplingFrequency);
+            //Debug.Log("Mic Ave Value : " + ave);
+            i = 0;
+            bool isAny = false;
+            for (i = 0; i < _MicAverageLog.Length; i++)
+            {
+                if (_MicAverageLog[i] > _MicThreshold)
+                {
+                    isAny = true;
+                }
+            }
+
+			if (isAny) {
+                OnUpdateMicData?.Invoke (_ProcessBuffer, length, _SamplingFrequency);
 			}
 
 			_PrevPosition = position;

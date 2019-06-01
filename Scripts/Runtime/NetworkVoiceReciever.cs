@@ -13,7 +13,9 @@ namespace ICKX.VoiceChat {
 	public class NetworkVoiceReciever : ManagerBase<NetworkVoiceReciever> {
 
 		private Dictionary<ushort, NetworkVoiceSource> _NetworkVoiceSourceList;
-		//public AudioSource CacheAudioSource { get; private set; }
+        //public AudioSource CacheAudioSource { get; private set; }
+
+        private Dictionary<ushort, uint> _PrevRecieveTimeTable = new Dictionary<ushort, uint>();
 
 		protected override void Initialize () {
 			base.Initialize ();
@@ -55,7 +57,19 @@ namespace ICKX.VoiceChat {
 						senderPosition = stream.ReadVector3 (ref ctx);
 						break;
 				}
-				ushort dataCount = stream.ReadUShort (ref ctx);
+                uint progressTime = stream.ReadUInt(ref ctx);
+
+                if(_PrevRecieveTimeTable.TryGetValue(senderPlayerId, out uint prevProgressTime))
+                {
+                    //古いパケットは受け取らない (ただしあまりに差がある場合はprogressTimeのズレの問題の可能性で無視)
+                    if (progressTime < prevProgressTime && Mathf.Abs(progressTime - prevProgressTime) < 1000)
+                    {
+                        return;
+                    }
+                }
+                _PrevRecieveTimeTable[senderPlayerId] = progressTime;
+
+                ushort dataCount = stream.ReadUShort (ref ctx);
 
 				if (!_NetworkVoiceSourceList.TryGetValue(playerId, out NetworkVoiceSource source)) {
 					source = CreateNetworkVoiceSource (playerId);
