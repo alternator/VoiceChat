@@ -145,7 +145,7 @@ namespace ICKX.VoiceChat {
 					sendVoicePacket.Write (senderPosition);
 					break;
 			}
-            sendVoicePacket.Write(GamePacketManager.progressTimeSinceStartup);
+            sendVoicePacket.Write(GamePacketManager.ProgressTimeSinceStartup);
 			sendVoicePacket.Write (dataLen);
 
 			//Debug.Log ($"{SendVoiceMode} : {length} : {_MaxVolume} : {_BitDepthCompressionLevel}");
