@@ -71,8 +71,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _MicrophoneReciever: {fileID: 42513123416203544}
+  _QosType: 2
   _SendVoiceMode: 0
   _BitDepthCompressionLevel: 2
+  _MaxVolume: 1
 --- !u!114 &42513123416203544
 MonoBehaviour:
   m_ObjectHideFlags: 0

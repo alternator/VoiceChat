@@ -4,7 +4,8 @@
         "Unity.Networking.Transport",
         "Unity.Collections",
         "ICKX.Common.Runtime",
-        "ICKX.Radome.Runtime"
+        "ICKX.Radome.Runtime",
+        "UnityOpus.Runtime"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],
@@ -13,5 +14,6 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": []
+    "defineConstraints": [],
+    "versionDefines": []
 }

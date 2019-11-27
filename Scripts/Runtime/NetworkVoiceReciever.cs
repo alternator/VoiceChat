@@ -45,7 +45,6 @@ namespace ICKX.VoiceChat {
 				var mode = (VoiceMode)stream.ReadByte (ref ctx);
 				ushort playerId = stream.ReadUShort (ref ctx);
 				ushort samplingFrequency = stream.ReadUShort (ref ctx);
-				byte bitDepthCompressionLevel = stream.ReadByte (ref ctx);
 				float maxVolume = stream.ReadFloat (ref ctx);
 
 				Vector3 senderPosition = default;
@@ -61,7 +60,7 @@ namespace ICKX.VoiceChat {
 
                 if(_PrevRecieveTimeTable.TryGetValue(senderPlayerId, out uint prevProgressTime))
                 {
-                    //古いパケットは受け取らない (ただしあまりに差がある場合はprogressTimeのズレの問題の可能性で無視)
+                    //古いパケットは受け取らない (ただしあまりに差がある場合はprogressTimeのズレの問題の可能性があるので受け取る)
                     if (progressTime < prevProgressTime && Mathf.Abs(progressTime - prevProgressTime) < 1000)
                     {
                         return;
@@ -69,16 +68,15 @@ namespace ICKX.VoiceChat {
                 }
                 _PrevRecieveTimeTable[senderPlayerId] = progressTime;
 
-                ushort dataCount = stream.ReadUShort (ref ctx);
+				ushort rawDataCount = stream.ReadUShort(ref ctx);
 
 				if (!_NetworkVoiceSourceList.TryGetValue(playerId, out NetworkVoiceSource source)) {
 					source = CreateNetworkVoiceSource (playerId);
 					_NetworkVoiceSourceList[playerId] = source;
-					Debug.Log ($"CreateNetworkVoiceSource : {playerId} : {bitDepthCompressionLevel}");
 				}
 
 				source.CacheTransform.position = senderPosition;
-				source.OnRecievePacket (mode, dataCount, samplingFrequency, bitDepthCompressionLevel, maxVolume, stream, ctx);
+				source.OnRecievePacket (mode, rawDataCount, samplingFrequency, maxVolume, stream, ctx);
 			}
 		}
 

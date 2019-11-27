@@ -9,72 +9,84 @@ using Unity.Networking.Transport.LowLevel.Unsafe;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace ICKX.VoiceChat {
+namespace ICKX.VoiceChat
+{
 
 	//	[RequireComponent(typeof(AudioSource))]
-	public class NetworkVoiceSource : MonoBehaviour {
+	public class NetworkVoiceSource : MonoBehaviour
+	{
+
+		[SerializeField]
+		private float _BufferingTime = 0.5f;
 
 		public ushort PlayerId { get; private set; }
 
-		private float[] _RecieveVoiceBuffer;
+		private byte[] _DecodeBuffer;
+		private float[] _DecodePcm;
+
 		private float[] _FilterVoiceBuffer;
 		private float[] _CopyBuffer;
-		private int _RecieveVoiceBufferLastPos;
 		private int _FilterVoiceBufferLastPos;
 
 		public VoiceMode Mode { get; private set; } = VoiceMode.End;
 
 		public ushort SamplingFrequency { get; private set; }
-		public byte BitDepthCompressionLevel { get; private set; }
 		public float MaxVolume { get; private set; }
 		public Transform CacheTransform { get; private set; }
 		public AudioSource CacheAudioSource { get; private set; }
 
-		private List<DecommpressData> dataList;
-		private Task task = null;
-		private bool isWriting = false;
+		private UnityOpus.Decoder _Decoder;
 		private int outputSampleRate = 0;
 		private float listerAngleSin;
 
-		public void Initialize (ushort playerId) {
+		private bool _IsBuffring = true;
+
+		public void Initialize(ushort playerId)
+		{
 			CacheTransform = transform;
-			CacheAudioSource = gameObject.AddComponent<AudioSource> ();
+			CacheAudioSource = gameObject.AddComponent<AudioSource>();
 			CacheAudioSource.loop = true;
 
-			_RecieveVoiceBuffer = new float[2048];
+			_DecodeBuffer = new byte[1024];
+			_DecodePcm = new float[2048];
 			_FilterVoiceBuffer = new float[4096];
 			_CopyBuffer = new float[1024];
-			
-			dataList = new List<DecommpressData> ();
-			DontDestroyOnLoad (gameObject);
-		}
 
-		private void OnDestroy () {
-			for (int i = 0; i < dataList.Count; i++) {
-				if(dataList[i].StreamCopy.IsCreated) {
-					dataList[i].StreamCopy.Dispose ();
-				}
-			}
+			DontDestroyOnLoad(gameObject);
 		}
 
 		//updateの前に呼ばれる
-		internal void OnRecievePacket (VoiceMode mode, ushort dataCount
-				, ushort samplingFrequency, byte compressionLevel, float maxVolume, DataStreamReader stream, DataStreamReader.Context ctx) {
+		internal unsafe void OnRecievePacket(VoiceMode mode, ushort dataCount
+				, ushort samplingFrequency, float maxVolume, DataStreamReader stream, DataStreamReader.Context ctx)
+		{
 
-			if (SamplingFrequency != samplingFrequency) {
+			if (SamplingFrequency != samplingFrequency)
+			{
 				SamplingFrequency = samplingFrequency;
-				_RecieveVoiceBufferLastPos = 0;
+
+				if (_Decoder != null) _Decoder.Dispose();
+
+				UnityOpus.SamplingFrequency frequency;
+				switch (samplingFrequency)
+				{
+					case 48000: frequency = UnityOpus.SamplingFrequency.Frequency_48000; break;
+					case 24000: frequency = UnityOpus.SamplingFrequency.Frequency_24000; break;
+					case 16000: frequency = UnityOpus.SamplingFrequency.Frequency_16000; break;
+					case 12000: frequency = UnityOpus.SamplingFrequency.Frequency_12000; break;
+					case 8000: frequency = UnityOpus.SamplingFrequency.Frequency_8000; break;
+					default: throw new System.NotSupportedException($"Frequency_{samplingFrequency} is not supported");
+				}
+				_Decoder = new UnityOpus.Decoder(frequency, UnityOpus.NumChannels.Mono);
 			}
-			if (BitDepthCompressionLevel != compressionLevel) {
-				BitDepthCompressionLevel = compressionLevel;
-				_RecieveVoiceBufferLastPos = 0;
-			}
-			if(MaxVolume != maxVolume) {
+			if (MaxVolume != maxVolume)
+			{
 				MaxVolume = maxVolume;
 			}
 
-			if (Mode != mode) {
-				switch (mode) {
+			if (Mode != mode)
+			{
+				switch (mode)
+				{
 					case VoiceMode.Default:
 						CacheAudioSource.spatialBlend = 0.0f;
 						break;
@@ -82,158 +94,117 @@ namespace ICKX.VoiceChat {
 						CacheAudioSource.spatialBlend = 0.0f;
 						break;
 					case VoiceMode.Virtual3D:
-						throw new System.NotFiniteNumberException ();
+						throw new System.NotFiniteNumberException();
 						//CacheAudioSource.spatialBlend = 1.0f;
 						//break;
 				}
-				if (!CacheAudioSource.isPlaying) CacheAudioSource.Play ();
+				if (!CacheAudioSource.isPlaying) CacheAudioSource.Play();
 				Mode = mode;
 			}
 
-			var streamCopy = new DataStreamWriter (stream.Length, Allocator.Persistent);
-			unsafe {
-				streamCopy.WriteBytes (stream.GetUnsafeReadOnlyPtr (), stream.Length);
+			int dataSize = stream.ReadUShort(ref ctx);
+			stream.ReadBytesIntoArray(ref ctx, ref _DecodeBuffer, dataSize);
+			int size = _Decoder.Decode(_DecodeBuffer, dataSize, _DecodePcm);
+
+			if (size < 0) return;
+
+			lock (_FilterVoiceBuffer)
+			{
+				while (_FilterVoiceBuffer.Length < _FilterVoiceBufferLastPos + size)
+				{
+					System.Array.Resize(ref _FilterVoiceBuffer, _FilterVoiceBuffer.Length * 2);
+				}
+				System.Array.Copy(_DecodePcm, 0, _FilterVoiceBuffer, _FilterVoiceBufferLastPos, size);
+				_FilterVoiceBufferLastPos += size;
 			}
-			var data = new DecommpressData () {
-				StreamCopy = streamCopy,
-				Ctx = ctx,
-				DataCount = dataCount,
-			};
-			dataList.Add (data);
 		}
 
-		struct DecommpressData {
-			public DataStreamWriter StreamCopy;
-			public DataStreamReader.Context Ctx;
-			public ushort DataCount;
-		}
-		
-		private Task DecommpressJob (List<DecommpressData> dataList) {
-			return Task.Run (() => {
-				foreach (var data in dataList) {
-					if (!data.StreamCopy.IsCreated) continue;
-
-					while (_RecieveVoiceBufferLastPos + data.DataCount + 1024 > _RecieveVoiceBuffer.Length) {
-						System.Array.Resize (ref _RecieveVoiceBuffer, _RecieveVoiceBuffer.Length * 2);
-					}
-
-					var reader = new DataStreamReader (data.StreamCopy, 0, data.StreamCopy.Length);
-					var ctx = data.Ctx;
-					switch (BitDepthCompressionLevel) {
-						case 0:
-							for (int i = 0; i < data.DataCount; i++) {
-								_RecieveVoiceBufferLastPos++;
-								_RecieveVoiceBuffer[_RecieveVoiceBufferLastPos] = (reader.ReadFloat (ref ctx)) * MaxVolume;
-							}
-							break;
-						case 1:
-							float invShort = 1.0f / (short.MaxValue - 1);
-							for (int i = 0; i < data.DataCount; i++) {
-								_RecieveVoiceBufferLastPos++;
-								_RecieveVoiceBuffer[_RecieveVoiceBufferLastPos] 
-									= (MuLawCompression.InvMuLaw (reader.ReadShort (ref ctx), short.MaxValue - 1, invShort)) * MaxVolume;
-							}
-							break;
-						case 2:
-							float invByte = 1.0f / 127;
-							for (int i = 0; i < data.DataCount; i++) {
-								_RecieveVoiceBufferLastPos++;
-								_RecieveVoiceBuffer[_RecieveVoiceBufferLastPos]
-									= (MuLawCompression.InvMuLaw (((short)reader.ReadByte (ref ctx) - 127), 127, invByte)) * MaxVolume;
-							}
-							break;
-						default:
-							throw new System.NotImplementedException ();
-					}
-
-                    _RecieveVoiceBuffer[_RecieveVoiceBufferLastPos] -= Mathf.Sign(_RecieveVoiceBuffer[_RecieveVoiceBufferLastPos]) * 0.05f;
-
-                }
-			});
-		}
-
-		private void Update () {
+		private void LateUpdate()
+		{
 			outputSampleRate = AudioSettings.outputSampleRate;
-			task = null;
-			if (dataList.Count > 0) {
-				task = DecommpressJob (dataList);
-			}
-		}
 
-		private void LateUpdate () {
-			if (task != null) {
-				task.Wait ();
-
-				var listerTrans = NetworkVoiceListener.Instance.CacheTransform;
-				var localPos = listerTrans.InverseTransformPoint (CacheTransform.position);
-				localPos.Normalize ();
-				listerAngleSin = localPos.x;
-
-				for (int i = 0; i < dataList.Count; i++) {
-					dataList[i].StreamCopy.Dispose ();
-				}
-				dataList.Clear ();
-
-				isWriting = true;
-				while (_FilterVoiceBuffer.Length <= _RecieveVoiceBufferLastPos + _FilterVoiceBufferLastPos) {
-					System.Array.Resize (ref _FilterVoiceBuffer, _FilterVoiceBuffer.Length * 2);
-				}
-				System.Array.Copy (_RecieveVoiceBuffer, 0, _FilterVoiceBuffer, _FilterVoiceBufferLastPos, _RecieveVoiceBufferLastPos);
-				_FilterVoiceBufferLastPos += _RecieveVoiceBufferLastPos;
-				_RecieveVoiceBufferLastPos = 0;
-				isWriting = false;
-			}
+			var listerTrans = NetworkVoiceListener.Instance.CacheTransform;
+			var localPos = listerTrans.InverseTransformPoint(CacheTransform.position);
+			localPos.Normalize();
+			listerAngleSin = localPos.x;
 		}
 
 		//VoiceState.DirectionOnlyなら左右の音量のシミュレーションを独自に行う
-		private void OnAudioFilterRead (float[] data, int channels) {
+		private void OnAudioFilterRead(float[] data, int channels)
+		{
 			//if (Mode != VoiceMode.DirectionOnly) return;
-			if(channels > 2) {
-				throw new System.NotSupportedException ();
+			if (channels > 2)
+			{
+				throw new System.NotSupportedException();
 			}
 
-			if (isWriting || _FilterVoiceBufferLastPos == 0) {
-				return;
-			}
+			lock (_FilterVoiceBuffer)
+			{
+				if (_FilterVoiceBufferLastPos == 0)
+				{
+					_IsBuffring = true;
+					return;
+				}
 
-			int dataSize = data.Length / channels;
-			float sampleRate = (float)SamplingFrequency / outputSampleRate;
-			int useRecieveVoiceDataSize = (int)((dataSize - 1) * sampleRate) + 1;
+				if (_IsBuffring && _FilterVoiceBufferLastPos < _BufferingTime * SamplingFrequency * 0.02f)
+				{
+					return;
+				}
+				_IsBuffring = false;
 
-			for (int i = 0; i < dataSize; i++) {
-				if(channels == 1) {
-					if ((int)(i * sampleRate) < _FilterVoiceBufferLastPos) {
-						data[i] = _FilterVoiceBuffer[(int)(i * sampleRate)];
-					} else {
-						data[i] = 0.0f;
+				int dataSize = data.Length / channels;
+				float sampleRate = (float)SamplingFrequency / outputSampleRate;
+				int useRecieveVoiceDataSize = (int)((dataSize - 1) * sampleRate) + 1;
+
+				for (int i = 0; i < dataSize; i++)
+				{
+					if (channels == 1)
+					{
+						if ((int)(i * sampleRate) < _FilterVoiceBufferLastPos)
+						{
+							data[i] = _FilterVoiceBuffer[(int)(i * sampleRate)];
+						}
+						else
+						{
+							data[i] = 0.0f;
+						}
 					}
-				} else {
-					if ((int)(i * sampleRate) < _FilterVoiceBufferLastPos) {
-						data[i * 2] = _FilterVoiceBuffer[(int)(i * sampleRate)];
-					} else {
-						data[i * 2] = 0.0f;
-					}
-					data[i * 2 + 1] = data[i * 2];
-					if (Mode == VoiceMode.DirectionOnly) {
-						data[i * 2] *= Mathf.Clamp01 (1.0f - listerAngleSin);
-						data[i * 2 + 1] *= Mathf.Clamp01 (1.0f + listerAngleSin);
+					else
+					{
+						if ((int)(i * sampleRate) < _FilterVoiceBufferLastPos)
+						{
+							data[i * 2] = _FilterVoiceBuffer[(int)(i * sampleRate)];
+						}
+						else
+						{
+							data[i * 2] = 0.0f;
+						}
+						data[i * 2 + 1] = data[i * 2];
+						if (Mode == VoiceMode.DirectionOnly)
+						{
+							data[i * 2] *= Mathf.Clamp01(1.0f - listerAngleSin);
+							data[i * 2 + 1] *= Mathf.Clamp01(1.0f + listerAngleSin);
+						}
 					}
 				}
-			}
 
-			while (_CopyBuffer.Length < useRecieveVoiceDataSize) {
-				System.Array.Resize (ref _CopyBuffer, _CopyBuffer.Length * 2);
-			}
-
-			for (int i = 0; i < _FilterVoiceBufferLastPos; i += useRecieveVoiceDataSize) {
-				if(_FilterVoiceBuffer.Length >= i + useRecieveVoiceDataSize * 2) {
-					System.Array.Copy (_FilterVoiceBuffer, useRecieveVoiceDataSize + i, _CopyBuffer, 0, useRecieveVoiceDataSize);
-					System.Array.Copy (_CopyBuffer, 0, _FilterVoiceBuffer, i, useRecieveVoiceDataSize);
+				while (_CopyBuffer.Length < useRecieveVoiceDataSize)
+				{
+					System.Array.Resize(ref _CopyBuffer, _CopyBuffer.Length * 2);
 				}
-			}
 
-			_FilterVoiceBufferLastPos -= useRecieveVoiceDataSize;
-			if (_FilterVoiceBufferLastPos < 0) _FilterVoiceBufferLastPos = 0;
+				for (int i = 0; i < _FilterVoiceBufferLastPos; i += useRecieveVoiceDataSize)
+				{
+					if (_FilterVoiceBuffer.Length >= i + useRecieveVoiceDataSize * 2)
+					{
+						System.Array.Copy(_FilterVoiceBuffer, useRecieveVoiceDataSize + i, _CopyBuffer, 0, useRecieveVoiceDataSize);
+						System.Array.Copy(_CopyBuffer, 0, _FilterVoiceBuffer, i, useRecieveVoiceDataSize);
+					}
+				}
+
+				_FilterVoiceBufferLastPos -= useRecieveVoiceDataSize;
+				if (_FilterVoiceBufferLastPos < 0) _FilterVoiceBufferLastPos = 0;
+			}
 		}
 	}
 }

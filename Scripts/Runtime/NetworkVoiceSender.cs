@@ -8,9 +8,11 @@ using ICKX.Radome;
 using Unity.Collections;
 using Unity.Jobs;
 
-namespace ICKX.VoiceChat {
+namespace ICKX.VoiceChat
+{
 
-	public static class MuLawCompression {
+	public static class MuLawCompression
+	{
 
 		/// <summary>
 		/// μ-Lawで圧縮
@@ -19,10 +21,11 @@ namespace ICKX.VoiceChat {
 		/// <param name="mu">値の範囲</param>
 		/// <param name="alpha"> 1.0f / Mathf.Log (mu + 1) * mu を事前に計算しておいて代入</param>
 		/// <returns></returns>
-		public static float MuLaw (float value, float mu, float alpha) {
-			float signVal = Mathf.Sign (value);
-			float absVal = Mathf.Abs (value);
-			float n = signVal * Mathf.Log (1 + mu * absVal) * alpha;
+		public static float MuLaw(float value, float mu, float alpha)
+		{
+			float signVal = Mathf.Sign(value);
+			float absVal = Mathf.Abs(value);
+			float n = signVal * Mathf.Log(1 + mu * absVal) * alpha;
 			return n;
 		}
 
@@ -33,39 +36,41 @@ namespace ICKX.VoiceChat {
 		/// <param name="mu">値の範囲</param>
 		/// <param name="invMu"> 1.0f / mu を事前に計算しておいて代入</param>
 		/// <returns></returns>
-		public static float InvMuLaw (float val, float mu, float invMu) {
-			float sign = Mathf.Sign (val);
-			float absVal = Mathf.Abs (val);
+		public static float InvMuLaw(float val, float mu, float invMu)
+		{
+			float sign = Mathf.Sign(val);
+			float absVal = Mathf.Abs(val);
 			float f = absVal * invMu;
-			float s = sign * invMu * (Mathf.Pow (1 + mu, f) - 1);
+			float s = sign * invMu * (Mathf.Pow(1 + mu, f) - 1);
 			return s;
 		}
 	}
 
-	public enum VoiceMode {
+	public enum VoiceMode
+	{
 		Default = 0,
 		DirectionOnly,
 		Virtual3D,
 		End,
 	}
 
-	public class NetworkVoiceSender : SingletonBehaviour<NetworkVoiceSender> {
+	public class NetworkVoiceSender : SingletonBehaviour<NetworkVoiceSender>
+	{
 
 		//重複するなら書き換える
 		public static byte VoiceSenderPacketType = 250;
 
 		[SerializeField]
 		private MicrophoneReciever _MicrophoneReciever;
-        [SerializeField]
-        private QosType _QosType = QosType.Unreliable;
+		[SerializeField]
+		private QosType _QosType = QosType.Unreliable;
 		[SerializeField]
 		private VoiceMode _SendVoiceMode;
 
-		[Tooltip ("ビット深度を何分の1まで圧縮するかどうか")]
-		[Range (0, 2)]
 		[SerializeField]
-		private int _BitDepthCompressionLevel = 2;
-		[Range (0.0f, 1.0f)]
+		private int _Bitrate = 96000;
+
+		[Range(0.0f, 1.0f)]
 		[SerializeField]
 		private float _MaxVolume = 1.0f;
 
@@ -73,146 +78,104 @@ namespace ICKX.VoiceChat {
 
 		public MicrophoneReciever MicrophoneReciever { get { return _MicrophoneReciever; } set { _MicrophoneReciever = value; } }
 		public VoiceMode SendVoiceMode { get { return _SendVoiceMode; } set { _SendVoiceMode = value; } }
-		public int BitDepthCompressionLevel { get { return _BitDepthCompressionLevel; } set { _BitDepthCompressionLevel = value; } }
 
-		public Transform cacheTransform { get; private set; }
+		public Transform CacheTransform { get; private set; }
 
-		private NativeArray<float> rawVoiceData;
-		private DataStreamWriter sendVoicePacket;
+		private DataStreamWriter _SendVoicePacket;
+		private UnityOpus.Encoder _Encoder;
+		private byte[] _EncodeBuffer = new byte[2048];
 
-		private JobHandle compressJobHandle;
+		protected override void Initialize()
+		{
+			base.Initialize();
+			CacheTransform = transform;
+			TargetPlayerList = new NativeList<ushort>(Allocator.Persistent);
 
-		protected override void Initialize () {
-			base.Initialize ();
-			cacheTransform = transform;
-			TargetPlayerList = new NativeList<ushort> (Allocator.Persistent);
+			_SendVoicePacket = new DataStreamWriter(NetworkParameterConstants.MTU, Allocator.Persistent);
+
+			UnityOpus.SamplingFrequency frequency;
+			switch (MicrophoneReciever.SamplingFrequency)
+			{
+				case 48000: frequency = UnityOpus.SamplingFrequency.Frequency_48000; break;
+				case 24000: frequency = UnityOpus.SamplingFrequency.Frequency_24000; break;
+				case 16000: frequency = UnityOpus.SamplingFrequency.Frequency_16000; break;
+				case 12000: frequency = UnityOpus.SamplingFrequency.Frequency_12000; break;
+				case 8000: frequency = UnityOpus.SamplingFrequency.Frequency_8000; break;
+				default: throw new NotSupportedException($"Frequency_{MicrophoneReciever.SamplingFrequency} is not supported");
+			}
+
+			_Encoder = new UnityOpus.Encoder(
+				frequency, UnityOpus.NumChannels.Mono, UnityOpus.OpusApplication.Audio)
+			{
+				Bitrate = _Bitrate,
+				Complexity = 10,
+				Signal = UnityOpus.OpusSignal.Music
+			};
 		}
 
-		void OnEnable () {
+		void OnEnable()
+		{
 			MicrophoneReciever.OnUpdateMicData += OnUpdateMicData;
 		}
 
-		void OnDisable () {
+		void OnDisable()
+		{
 			MicrophoneReciever.OnUpdateMicData -= OnUpdateMicData;
 		}
 
-		private void OnDestroy () {
-			TargetPlayerList.Dispose ();
+		private void OnDestroy()
+		{
+			TargetPlayerList.Dispose();
+			_SendVoicePacket.Dispose();
 		}
 
 		//Updateのタイミングで呼ばれる
-		private void OnUpdateMicData (float[] readOnlyData, int length, int samplingFrequency) {
-
-			if(GamePacketManager.NetworkManager == null || GamePacketManager.NetworkManager.NetworkState != NetworkConnection.State.Connected) {
+		private void OnUpdateMicData(float[] readOnlyData, int rawLength, int samplingFrequency)
+		{
+			if (GamePacketManager.NetworkManager == null || GamePacketManager.NetworkManager.NetworkState != NetworkConnection.State.Connected)
+			{
 				return;
 			}
 
-			Vector3 senderPosition = cacheTransform.position;
+			Vector3 senderPosition = CacheTransform.position;
 
-			int packetLen = 19;
-			switch (SendVoiceMode) {
+			int dataSize = _Encoder.Encode(readOnlyData, rawLength, _EncodeBuffer);
+
+			if (dataSize > 1024 || dataSize <= 0)
+			{
+				Debug.LogWarning("Frame Drop and MicData Lost.");
+				return;
+			}
+
+			_SendVoicePacket.Clear();
+			_SendVoicePacket.Write(VoiceSenderPacketType);
+			_SendVoicePacket.Write((byte)SendVoiceMode);
+			_SendVoicePacket.Write(GamePacketManager.PlayerId);
+			_SendVoicePacket.Write((ushort)_MicrophoneReciever.SamplingFrequency);
+			_SendVoicePacket.Write(_MaxVolume);
+			switch (SendVoiceMode)
+			{
 				case VoiceMode.Default:
 					break;
 				case VoiceMode.DirectionOnly:
 				case VoiceMode.Virtual3D:
-					packetLen += 12;
+					_SendVoicePacket.Write(senderPosition);
 					break;
 			}
+			_SendVoicePacket.Write(GamePacketManager.ProgressTimeSinceStartup);
+			_SendVoicePacket.Write((ushort)rawLength);
+			_SendVoicePacket.Write((ushort)dataSize);
+			_SendVoicePacket.Write(_EncodeBuffer, dataSize);
 
-			ushort dataLen = (ushort)length;
-			int dataSize = (4 / (int)Mathf.Pow (2, _BitDepthCompressionLevel)) * dataLen;
+			//Debug.Log($"{rawLength} {dataSize} {_SendVoicePacket.Length}");
 
-			if (dataSize + packetLen > NetworkParameterConstants.MTU) {
-				//Debug.LogWarning ("Voiceデータが大きすぎるため送れないデータがあります \n " +
-				//	"CompressionLevelを大きくするか,マイク入力のサンプル数を小さくしてください");
-				dataLen = (ushort)(300 * Mathf.Pow (2, _BitDepthCompressionLevel));
-				dataSize = 1200;
+			if (TargetPlayerList.Length == 0)
+			{
+				GamePacketManager.Brodcast(_SendVoicePacket, _QosType, true);
 			}
-			packetLen += dataSize;
-
-			sendVoicePacket = new DataStreamWriter (packetLen, Allocator.TempJob);
-			sendVoicePacket.Write (VoiceSenderPacketType);
-			sendVoicePacket.Write ((byte)SendVoiceMode);
-			sendVoicePacket.Write (GamePacketManager.PlayerId);
-			sendVoicePacket.Write ((ushort)_MicrophoneReciever.SamplingFrequency);
-			sendVoicePacket.Write ((byte)_BitDepthCompressionLevel);
-			sendVoicePacket.Write (_MaxVolume);
-			switch (SendVoiceMode) {
-				case VoiceMode.Default:
-					break;
-				case VoiceMode.DirectionOnly:
-				case VoiceMode.Virtual3D:
-					sendVoicePacket.Write (senderPosition);
-					break;
-			}
-            sendVoicePacket.Write(GamePacketManager.ProgressTimeSinceStartup);
-			sendVoicePacket.Write (dataLen);
-
-			//Debug.Log ($"{SendVoiceMode} : {length} : {_MaxVolume} : {_BitDepthCompressionLevel}");
-
-			rawVoiceData = new NativeArray<float> (readOnlyData, Allocator.TempJob);
-
-			var compressJob = new CompressJob () {
-				bitDepthCompressionLevel = _BitDepthCompressionLevel,
-				maxVolume = _MaxVolume,
-				rawVoiceData = rawVoiceData,
-				rawVoiceDataLength = dataLen,
-				sendVoicePacket = sendVoicePacket,
-			};
-			compressJobHandle = compressJob.Schedule ();
-			JobHandle.ScheduleBatchedJobs ();
-		}
-
-		
-		private void LateUpdate () {
-			compressJobHandle.Complete ();
-
-			if (sendVoicePacket.IsCreated && sendVoicePacket.Length != 0) {
-				if(TargetPlayerList.Length == 0) {
-					//Debug.Log ("sendVoicePacket : " + sendVoicePacket.Length);
-					GamePacketManager.Brodcast (sendVoicePacket, _QosType, true);
-				}else {
-					GamePacketManager.Multicast (TargetPlayerList, sendVoicePacket, _QosType);
-				}
-				sendVoicePacket.Dispose ();
-				rawVoiceData.Dispose ();
-			}
-		}
-
-		struct CompressJob : IJob {
-			public int bitDepthCompressionLevel;
-			public float maxVolume;
-
-			public NativeArray<float> rawVoiceData;
-			public int rawVoiceDataLength;
-			public DataStreamWriter sendVoicePacket;
-
-			public void Execute () {
-				float invMaxVolume = 1.0f / maxVolume;
-				switch (bitDepthCompressionLevel) {
-					case 0:
-						for (int i = 0; i < rawVoiceDataLength; i++) {
-							float value = Mathf.Clamp (rawVoiceData[i] * invMaxVolume, -1.0f, 1.0f);
-							sendVoicePacket.Write (value);
-						}
-						break;
-					case 1:
-						float alphaShort = 1.0f / Mathf.Log (short.MaxValue) * (short.MaxValue - 1);
-						for (int i = 0; i < rawVoiceDataLength; i++) {
-							float value = Mathf.Clamp (rawVoiceData[i] * invMaxVolume, -1.0f, 1.0f);
-							sendVoicePacket.Write ((short)MuLawCompression.MuLaw (value, short.MaxValue - 1, alphaShort));
-						}
-						break;
-					case 2:
-						float alphaByte = 1.0f / Mathf.Log (128) * 127;
-						for (int i = 0; i < rawVoiceDataLength; i++) {
-							float value = Mathf.Clamp (rawVoiceData[i] * invMaxVolume, -1.0f, 1.0f);
-							sendVoicePacket.Write ((byte)(MuLawCompression.MuLaw (value, 127, alphaByte) + 127));
-						}
-						break;
-					default:
-						throw new System.NotImplementedException ();
-				}
+			else
+			{
+				GamePacketManager.Multicast(TargetPlayerList, _SendVoicePacket, _QosType);
 			}
 		}
 	}
