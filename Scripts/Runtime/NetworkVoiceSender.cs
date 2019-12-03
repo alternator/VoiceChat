@@ -10,42 +10,6 @@ using Unity.Jobs;
 
 namespace ICKX.VoiceChat
 {
-
-	public static class MuLawCompression
-	{
-
-		/// <summary>
-		/// μ-Lawで圧縮
-		/// </summary>
-		/// <param name="val">対象の値</param>
-		/// <param name="mu">値の範囲</param>
-		/// <param name="alpha"> 1.0f / Mathf.Log (mu + 1) * mu を事前に計算しておいて代入</param>
-		/// <returns></returns>
-		public static float MuLaw(float value, float mu, float alpha)
-		{
-			float signVal = Mathf.Sign(value);
-			float absVal = Mathf.Abs(value);
-			float n = signVal * Mathf.Log(1 + mu * absVal) * alpha;
-			return n;
-		}
-
-		/// <summary>
-		/// μ-Lawを解凍
-		/// </summary>
-		/// <param name="val">対象の値</param>
-		/// <param name="mu">値の範囲</param>
-		/// <param name="invMu"> 1.0f / mu を事前に計算しておいて代入</param>
-		/// <returns></returns>
-		public static float InvMuLaw(float val, float mu, float invMu)
-		{
-			float sign = Mathf.Sign(val);
-			float absVal = Mathf.Abs(val);
-			float f = absVal * invMu;
-			float s = sign * invMu * (Mathf.Pow(1 + mu, f) - 1);
-			return s;
-		}
-	}
-
 	public enum VoiceMode
 	{
 		Default = 0,
@@ -83,7 +47,7 @@ namespace ICKX.VoiceChat
 
 		private DataStreamWriter _SendVoicePacket;
 		private UnityOpus.Encoder _Encoder;
-		private byte[] _EncodeBuffer = new byte[2048];
+		private byte[] _EncodeBuffer = new byte[ushort.MaxValue];
 
 		protected override void Initialize()
 		{
@@ -105,11 +69,11 @@ namespace ICKX.VoiceChat
 			}
 
 			_Encoder = new UnityOpus.Encoder(
-				frequency, UnityOpus.NumChannels.Mono, UnityOpus.OpusApplication.Audio)
+				frequency, UnityOpus.NumChannels.Mono, UnityOpus.OpusApplication.VoIP)
 			{
 				Bitrate = _Bitrate,
 				Complexity = 10,
-				Signal = UnityOpus.OpusSignal.Music
+				Signal = UnityOpus.OpusSignal.Voice
 			};
 		}
 
@@ -141,9 +105,11 @@ namespace ICKX.VoiceChat
 
 			int dataSize = _Encoder.Encode(readOnlyData, rawLength, _EncodeBuffer);
 
+			//Debug.LogWarning($"dataSize {dataSize}, rawLength {rawLength}");
 			if (dataSize > 1024 || dataSize <= 0)
 			{
 				Debug.LogWarning("Frame Drop and MicData Lost.");
+				Debug.LogWarning(string.Join(",", new System.ArraySegment<float>(readOnlyData, 0, rawLength)));
 				return;
 			}
 
