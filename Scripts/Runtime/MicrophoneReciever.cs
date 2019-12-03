@@ -29,6 +29,7 @@ namespace ICKX.VoiceChat {
 		private int _HeadPos = 0;
 
 		public int SamplingFrequency { get { return _SamplingFrequency; } }
+		public float MicThreshold { get { return _MicThreshold; } set { _MicThreshold = value; } }
 
 		public event OnRecieveMicDataEvent OnUpdateMicData = null;
 
@@ -69,8 +70,12 @@ namespace ICKX.VoiceChat {
 			}
 
 			_MicrophoneClip.GetData(_MicrophoneBuffer, 0);
+
+			int whileSafty = 0;
 			while (GetDataLength(_MicrophoneBuffer.Length, _HeadPos, position) > _ProcessBuffer.Length)
 			{
+				if (whileSafty++ > 10) return;
+
 				var remain = _MicrophoneBuffer.Length - _HeadPos;
 				if (remain < _ProcessBuffer.Length)
 				{
