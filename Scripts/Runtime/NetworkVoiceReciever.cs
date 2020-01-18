@@ -15,7 +15,7 @@ namespace ICKX.VoiceChat {
 		private Dictionary<ushort, NetworkVoiceSource> _NetworkVoiceSourceList;
         //public AudioSource CacheAudioSource { get; private set; }
 
-        private Dictionary<ushort, uint> _PrevRecieveTimeTable = new Dictionary<ushort, uint>();
+        private Dictionary<ushort, long> _PrevRecieveTimeTable = new Dictionary<ushort, long>();
 
 		protected override void Initialize () {
 			base.Initialize ();
@@ -40,7 +40,6 @@ namespace ICKX.VoiceChat {
 
 		//updateの前に呼ばれる
 		private void OnRecievePacket (ushort senderPlayerId, ulong senderUniqueId, byte type, DataStreamReader stream, DataStreamReader.Context ctx) {
-			//Debug.Log ("OnRecievePacket : " + type);
 			if (type == NetworkVoiceSender.VoiceSenderPacketType) {
 				var mode = (VoiceMode)stream.ReadByte (ref ctx);
 				ushort playerId = stream.ReadUShort (ref ctx);
@@ -56,17 +55,17 @@ namespace ICKX.VoiceChat {
 						senderPosition = stream.ReadVector3 (ref ctx);
 						break;
 				}
-                uint progressTime = stream.ReadUInt(ref ctx);
+                long unixTime = stream.ReadLong(ref ctx);
 
-                if(_PrevRecieveTimeTable.TryGetValue(senderPlayerId, out uint prevProgressTime))
+				if (_PrevRecieveTimeTable.TryGetValue(senderPlayerId, out long prevProgressTime))
                 {
-                    //古いパケットは受け取らない (ただしあまりに差がある場合はprogressTimeのズレの問題の可能性があるので受け取る)
-                    if (progressTime < prevProgressTime && Mathf.Abs(progressTime - prevProgressTime) < 1000)
+					//古いパケットは受け取らない
+					if (unixTime < prevProgressTime) //|| GamePacketManager.CurrentUnixTime - unixTime > 500)
                     {
                         return;
                     }
                 }
-                _PrevRecieveTimeTable[senderPlayerId] = progressTime;
+                _PrevRecieveTimeTable[senderPlayerId] = unixTime;
 
 				ushort rawDataCount = stream.ReadUShort(ref ctx);
 

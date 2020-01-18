@@ -12,6 +12,8 @@ namespace ICKX.VoiceChat {
 		private const int MicLengthSeconds = 1;
 
 		[SerializeField]
+		private float _MicGain = 1.0f;
+		[SerializeField]
 		private float _MicThreshold = 0.05f;
 		[SerializeField]
 		private int _MicSuspendFrame = 10;
@@ -29,6 +31,7 @@ namespace ICKX.VoiceChat {
 		private int _HeadPos = 0;
 
 		public int SamplingFrequency { get { return _SamplingFrequency; } }
+		public float MicGain { get { return _MicGain; } set { _MicGain = value; } }
 		public float MicThreshold { get { return _MicThreshold; } set { _MicThreshold = value; } }
 
 		public event OnRecieveMicDataEvent OnUpdateMicData = null;
@@ -50,8 +53,7 @@ namespace ICKX.VoiceChat {
 			_MicAverageLog = new float[_MicSuspendFrame];
 
             yield return new WaitForSeconds(1.0f);
-
-
+			
             foreach (var dev in Microphone.devices)
             {
                 Microphone.GetDeviceCaps(dev, out int min, out int max);
@@ -59,7 +61,16 @@ namespace ICKX.VoiceChat {
             }
         }
 
-        void Update ()
+		void RestartMic ()
+		{
+			Destroy(_MicrophoneClip);
+			_MicrophoneClip = Microphone.Start(null, true, 1, _SamplingFrequency);
+			_HeadPos = 0;
+
+			Debug.Log($"RestartMic");
+		}
+
+		void Update ()
         {
             if (_MicrophoneClip == null) return;
 			
@@ -69,12 +80,17 @@ namespace ICKX.VoiceChat {
 				return;
 			}
 
+			if (position > _MicrophoneClip.samples)
+			{
+				RestartMic();
+				return;
+			}
+
 			_MicrophoneClip.GetData(_MicrophoneBuffer, 0);
 
 			int whileSafty = 0;
 			while (GetDataLength(_MicrophoneBuffer.Length, _HeadPos, position) > _ProcessBuffer.Length)
 			{
-				if (whileSafty++ > 10) return;
 
 				var remain = _MicrophoneBuffer.Length - _HeadPos;
 				if (remain < _ProcessBuffer.Length)
@@ -88,11 +104,12 @@ namespace ICKX.VoiceChat {
 				}
 
 				float ave = 0.0f;
-				for (int i = 0; i < _ProcessBuffer.Length; i += 5)
+				for (int i = 0; i < _ProcessBuffer.Length; i ++)
 				{
+					_ProcessBuffer[i] *= _MicGain;
 					ave += Mathf.Abs(_ProcessBuffer[i]);
 				}
-				ave /= (_ProcessBuffer.Length / 5);
+				ave /= (_ProcessBuffer.Length);
 
 				for (int i = _MicAverageLog.Length - 1; i > 0; i--)
 				{

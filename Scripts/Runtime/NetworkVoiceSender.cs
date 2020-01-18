@@ -128,12 +128,12 @@ namespace ICKX.VoiceChat
 					_SendVoicePacket.Write(senderPosition);
 					break;
 			}
-			_SendVoicePacket.Write(GamePacketManager.ProgressTimeSinceStartup);
+			_SendVoicePacket.Write(GamePacketManager.CurrentUnixTime);
 			_SendVoicePacket.Write((ushort)rawLength);
 			_SendVoicePacket.Write((ushort)dataSize);
 			_SendVoicePacket.Write(_EncodeBuffer, dataSize);
 
-			//Debug.Log($"{rawLength} {dataSize} {_SendVoicePacket.Length}");
+			//Debug.Log($"{rawLength} {dataSize} {GamePacketManager.CurrentUnixTime}");
 
 			if (TargetPlayerList.Length == 0)
 			{
