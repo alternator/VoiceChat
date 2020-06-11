@@ -34,6 +34,9 @@ namespace ICKX.VoiceChat {
 		public float MicGain { get { return _MicGain; } set { _MicGain = value; } }
 		public float MicThreshold { get { return _MicThreshold; } set { _MicThreshold = value; } }
 
+		public float MicIntensity { get { return _MicAverageLog == null ? 0.0f : _MicAverageLog[0]; } }
+
+		public string SelectedMicDevice { get; private set; } = null;
 		public event OnRecieveMicDataEvent OnUpdateMicData = null;
 
 		IEnumerator Start ()
@@ -44,7 +47,7 @@ namespace ICKX.VoiceChat {
                 yield return new WaitForSeconds(1.0f);
             }
 
-            _MicrophoneClip = Microphone.Start (null, true, 1, _SamplingFrequency);
+            _MicrophoneClip = Microphone.Start (SelectedMicDevice, true, 1, _SamplingFrequency);
 
 			//44100x1sで880, 22050x1sで440ほどPositionが移動する.ので50Hzぐらいで更新している様子
 			//フレーム落ちで2倍の量移動することがあるので、それでも記録できる程度に
@@ -61,10 +64,11 @@ namespace ICKX.VoiceChat {
             }
         }
 
-		void RestartMic ()
+		public void RestartMic (string deviceName)
 		{
+			SelectedMicDevice = deviceName;
 			Destroy(_MicrophoneClip);
-			_MicrophoneClip = Microphone.Start(null, true, 1, _SamplingFrequency);
+			_MicrophoneClip = Microphone.Start(deviceName, true, 1, _SamplingFrequency);
 			_HeadPos = 0;
 
 			Debug.Log($"RestartMic");
@@ -82,7 +86,7 @@ namespace ICKX.VoiceChat {
 
 			if (position > _MicrophoneClip.samples)
 			{
-				RestartMic();
+				RestartMic(SelectedMicDevice);
 				return;
 			}
 
