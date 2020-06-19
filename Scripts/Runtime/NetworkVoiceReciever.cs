@@ -17,6 +17,8 @@ namespace ICKX.VoiceChat {
 
         private Dictionary<ushort, long> _PrevRecieveTimeTable = new Dictionary<ushort, long>();
 
+		public IReadOnlyDictionary<ushort, NetworkVoiceSource> NetworkVoiceSourceTable => _NetworkVoiceSourceList;
+
 		protected override void Initialize () {
 			base.Initialize ();
 			_NetworkVoiceSourceList = new Dictionary<ushort, NetworkVoiceSource> ();

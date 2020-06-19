@@ -42,6 +42,7 @@ namespace ICKX.VoiceChat
 
 		public MicrophoneReciever MicrophoneReciever { get { return _MicrophoneReciever; } set { _MicrophoneReciever = value; } }
 		public VoiceMode SendVoiceMode { get { return _SendVoiceMode; } set { _SendVoiceMode = value; } }
+		public QosType QosType { get { return _QosType; } set { _QosType = value; } }
 
 		public Transform CacheTransform { get; private set; }
 
@@ -119,6 +120,7 @@ namespace ICKX.VoiceChat
 			_SendVoicePacket.Write(GamePacketManager.PlayerId);
 			_SendVoicePacket.Write((ushort)_MicrophoneReciever.SamplingFrequency);
 			_SendVoicePacket.Write(_MaxVolume);
+
 			switch (SendVoiceMode)
 			{
 				case VoiceMode.Default:

@@ -35,6 +35,8 @@ namespace ICKX.VoiceChat
 		public Transform CacheTransform { get; private set; }
 		public AudioSource CacheAudioSource { get; private set; }
 
+		public float Intensity { get; private set; }
+
 		private UnityOpus.Decoder _Decoder;
 		private int outputSampleRate = 0;
 		private float listerAngleSin;
@@ -187,6 +189,14 @@ namespace ICKX.VoiceChat
 						}
 					}
 				}
+
+				float ave = 0.0f;
+				for (int i = 0; i < data.Length; i+=5)
+				{
+					ave += Mathf.Abs(data[i]);
+				}
+				ave /= (data.Length / 5);
+				Intensity = ave;
 
 				while (_CopyBuffer.Length < useRecieveVoiceDataSize)
 				{
