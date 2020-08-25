@@ -23,6 +23,7 @@ namespace ICKX.VoiceChat
 
 		//重複するなら書き換える
 		public static byte VoiceSenderPacketType = 250;
+		public static byte VoiceUpdatePacketType = 251;
 
 		[SerializeField]
 		private MicrophoneReciever _MicrophoneReciever;
@@ -38,7 +39,11 @@ namespace ICKX.VoiceChat
 		[SerializeField]
 		private float _MaxVolume = 1.0f;
 
-		public NativeList<ushort> TargetPlayerList { get; set; }
+		[Tooltip("Virtual3Dモードのみ")]
+		[SerializeField]
+		private float _MaxDistance = 10.0f;
+
+		public NativeList<ushort> TargetPlayerList;
 
 		public MicrophoneReciever MicrophoneReciever { get { return _MicrophoneReciever; } set { _MicrophoneReciever = value; } }
 		public VoiceMode SendVoiceMode { get { return _SendVoiceMode; } set { _SendVoiceMode = value; } }
@@ -50,6 +55,12 @@ namespace ICKX.VoiceChat
 		private UnityOpus.Encoder _Encoder;
 		private byte[] _EncodeBuffer = new byte[ushort.MaxValue];
 
+		private const int MaxSendVoiceTarget = 4;
+		private const float UpdateInterval = 0.05f;
+		private const float UpdatePosThreashold = 0.05f;
+		private float _PrevUpdateTime;
+		private Vector3 _PrevPos;
+		
 		protected override void Initialize()
 		{
 			base.Initialize();
@@ -76,6 +87,8 @@ namespace ICKX.VoiceChat
 				Complexity = 10,
 				Signal = UnityOpus.OpusSignal.Voice
 			};
+			Debug.LogError($"Initialize");
+
 		}
 
 		void OnEnable()
@@ -92,6 +105,28 @@ namespace ICKX.VoiceChat
 		{
 			TargetPlayerList.Dispose();
 			_SendVoicePacket.Dispose();
+		}
+
+		private void Update()
+		{
+			if(_SendVoiceMode != VoiceMode.Default
+				&& Time.realtimeSinceStartup - _PrevUpdateTime > UpdateInterval
+				&& Vector3.Distance(_PrevPos, CacheTransform.position) > UpdatePosThreashold)
+			{
+				SendUpdatePacket();
+			}
+		}
+
+		private void SendUpdatePacket ()
+		{
+			Vector3 senderPosition = CacheTransform.position;
+			_SendVoicePacket.Clear();
+			_SendVoicePacket.Write(VoiceUpdatePacketType);
+			_SendVoicePacket.Write(GamePacketManager.PlayerId);
+			_SendVoicePacket.Write(GamePacketManager.CurrentUnixTime);
+			_SendVoicePacket.Write(senderPosition);
+
+			GamePacketManager.Brodcast( _SendVoicePacket, QosType.Unreliable);
 		}
 
 		//Updateのタイミングで呼ばれる
@@ -126,8 +161,11 @@ namespace ICKX.VoiceChat
 				case VoiceMode.Default:
 					break;
 				case VoiceMode.DirectionOnly:
+					_SendVoicePacket.Write(senderPosition);
+					break;
 				case VoiceMode.Virtual3D:
 					_SendVoicePacket.Write(senderPosition);
+					_SendVoicePacket.Write(_MaxDistance);
 					break;
 			}
 			_SendVoicePacket.Write(GamePacketManager.CurrentUnixTime);
@@ -137,13 +175,85 @@ namespace ICKX.VoiceChat
 
 			//Debug.Log($"{rawLength} {dataSize} {GamePacketManager.CurrentUnixTime}");
 
-			if (TargetPlayerList.Length == 0)
+			if(SendVoiceMode != VoiceMode.Virtual3D)
 			{
-				GamePacketManager.Brodcast(_SendVoicePacket, _QosType, true);
+				if (TargetPlayerList.Length == 0)
+				{
+					GamePacketManager.Brodcast(_SendVoicePacket, _QosType, true);
+				}
+				else
+				{
+					GamePacketManager.Multicast(TargetPlayerList, _SendVoicePacket, _QosType);
+				}
 			}
 			else
 			{
-				GamePacketManager.Multicast(TargetPlayerList, _SendVoicePacket, _QosType);
+				//GamePacketManager.Brodcast(_SendVoicePacket, _QosType, true);
+				//return;
+
+				TargetPlayerList.Clear();
+
+				//対象範囲内のみ送信
+				foreach (var sourceA in NetworkVoiceReciever.Instance.NetworkVoiceSourceTable.Values)
+				{
+					//Debug.Log(TargetPlayerList.Length + " : PlayerId " + sourceA.PlayerId);
+					if (sourceA.PlayerId == GamePacketManager.PlayerId) continue;
+
+					if (TargetPlayerList.Length == 0)
+					{
+						var distanceA = Vector3.SqrMagnitude(sourceA.CacheTransform.position - CacheTransform.position);
+						if (distanceA < _MaxDistance * _MaxDistance)
+						{
+							TargetPlayerList.Add(sourceA.PlayerId);
+						}
+					}
+					else
+					{
+						//最寄りのMaxSendVoiceTargetの数まで選んで音声を送信する
+						for (int i = TargetPlayerList.Length - 1; i >= 0; i--)
+						{
+							ushort playerIdB = TargetPlayerList[i];
+							if (playerIdB == sourceA.PlayerId) continue;
+
+							var distanceA = Vector3.SqrMagnitude(sourceA.CacheTransform.position - CacheTransform.position);
+							if (distanceA > _MaxDistance * _MaxDistance) break;
+
+							if (NetworkVoiceReciever.Instance.NetworkVoiceSourceTable.TryGetValue(playerIdB, out var sourceB))
+							{
+								var distanceB = Vector3.SqrMagnitude(sourceB.CacheTransform.position - CacheTransform.position);
+
+								//遠ければ並び替え終了
+								if (distanceA > distanceB)
+								{
+									//最後の要素かどうか
+									if (i == TargetPlayerList.Length - 1 && i < MaxSendVoiceTarget - 1)
+									{
+										TargetPlayerList.Add(sourceA.PlayerId);
+									}
+									break;
+								}
+								else
+								{
+									if (i == TargetPlayerList.Length - 1 && i < MaxSendVoiceTarget - 1)
+									{
+										TargetPlayerList.Add(sourceB.PlayerId);
+									}
+									else if (i < TargetPlayerList.Length - 1)
+									{
+										TargetPlayerList[i + 1] = TargetPlayerList[i];
+									}
+									TargetPlayerList[i] = sourceA.PlayerId;
+								}
+							}
+						}
+					}
+				}
+
+				if(TargetPlayerList.Length > 0)
+				{
+					GamePacketManager.Multicast(TargetPlayerList, _SendVoicePacket, _QosType);
+					//Debug.Log($"NetworkVoiceSourceTable {TargetPlayerList.Length}");
+				}
 			}
 		}
 	}

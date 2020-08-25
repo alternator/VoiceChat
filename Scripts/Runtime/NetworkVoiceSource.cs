@@ -32,6 +32,7 @@ namespace ICKX.VoiceChat
 
 		public ushort SamplingFrequency { get; private set; }
 		public float MaxVolume { get; private set; }
+		public float MaxDistance { get; private set; } = 10.0f;
 		public Transform CacheTransform { get; private set; }
 		public AudioSource CacheAudioSource { get; private set; }
 
@@ -40,6 +41,7 @@ namespace ICKX.VoiceChat
 		private UnityOpus.Decoder _Decoder;
 		private int outputSampleRate = 0;
 		private float listerAngleSin;
+		private float listerDistance;
 
 		private bool _IsBuffring = true;
 
@@ -48,6 +50,8 @@ namespace ICKX.VoiceChat
 			CacheTransform = transform;
 			CacheAudioSource = gameObject.AddComponent<AudioSource>();
 			CacheAudioSource.loop = true;
+			CacheAudioSource.spatialBlend = 0.0f;
+			PlayerId = playerId;
 
 			_DecodeBuffer = new byte[1024];
 			_DecodePcm = new float[2048];
@@ -59,7 +63,7 @@ namespace ICKX.VoiceChat
 
 		//updateの前に呼ばれる
 		internal unsafe void OnRecievePacket(VoiceMode mode, ushort dataCount
-				, ushort samplingFrequency, float maxVolume, DataStreamReader stream, DataStreamReader.Context ctx)
+				, ushort samplingFrequency, float maxVolume, float maxDistance, DataStreamReader stream, DataStreamReader.Context ctx)
 		{
 
 			if (SamplingFrequency != samplingFrequency)
@@ -80,35 +84,21 @@ namespace ICKX.VoiceChat
 				}
 				_Decoder = new UnityOpus.Decoder(frequency, UnityOpus.NumChannels.Mono);
 			}
-			if (MaxVolume != maxVolume)
-			{
-				MaxVolume = maxVolume;
-			}
+			MaxVolume = maxVolume;
+			if(maxDistance > 0.0f) MaxDistance = maxDistance;
 
 			if (Mode != mode)
 			{
-				switch (mode)
-				{
-					case VoiceMode.Default:
-						CacheAudioSource.spatialBlend = 0.0f;
-						break;
-					case VoiceMode.DirectionOnly:
-						CacheAudioSource.spatialBlend = 0.0f;
-						break;
-					case VoiceMode.Virtual3D:
-						throw new System.NotFiniteNumberException();
-						//CacheAudioSource.spatialBlend = 1.0f;
-						//break;
-				}
 				if (!CacheAudioSource.isPlaying) CacheAudioSource.Play();
 				Mode = mode;
 			}
 
 			int dataSize = stream.ReadUShort(ref ctx);
+			if (dataSize <= 0) return;
 			stream.ReadBytesIntoArray(ref ctx, ref _DecodeBuffer, dataSize);
 			int size = _Decoder.Decode(_DecodeBuffer, dataSize, _DecodePcm);
 
-			if (size < 0) return;
+			if (size <= 0) return;
 
 			lock (_FilterVoiceBuffer)
 			{
@@ -127,6 +117,8 @@ namespace ICKX.VoiceChat
 
 			var listerTrans = NetworkVoiceListener.Instance.CacheTransform;
 			var localPos = listerTrans.InverseTransformPoint(CacheTransform.position);
+			listerDistance = localPos.magnitude;
+
 			localPos.Normalize();
 			listerAngleSin = localPos.x;
 		}
@@ -158,13 +150,16 @@ namespace ICKX.VoiceChat
 				float sampleRate = (float)SamplingFrequency / outputSampleRate;
 				int useRecieveVoiceDataSize = (int)((dataSize - 1) * sampleRate) + 1;
 
+				float distanceFactor = Mathf.Clamp01(1.0f - listerDistance / MaxDistance);
+
 				for (int i = 0; i < dataSize; i++)
 				{
+
 					if (channels == 1)
 					{
 						if ((int)(i * sampleRate) < _FilterVoiceBufferLastPos)
 						{
-							data[i] = _FilterVoiceBuffer[(int)(i * sampleRate)];
+							data[i] = _FilterVoiceBuffer[(int)(i * sampleRate)] * distanceFactor;
 						}
 						else
 						{
@@ -175,17 +170,23 @@ namespace ICKX.VoiceChat
 					{
 						if ((int)(i * sampleRate) < _FilterVoiceBufferLastPos)
 						{
-							data[i * 2] = _FilterVoiceBuffer[(int)(i * sampleRate)];
+							data[i * 2] = _FilterVoiceBuffer[(int)(i * sampleRate)] * distanceFactor;
 						}
 						else
 						{
 							data[i * 2] = 0.0f;
 						}
 						data[i * 2 + 1] = data[i * 2];
+
 						if (Mode == VoiceMode.DirectionOnly)
 						{
 							data[i * 2] *= Mathf.Clamp01(1.0f - listerAngleSin);
 							data[i * 2 + 1] *= Mathf.Clamp01(1.0f + listerAngleSin);
+						}
+						else if (Mode == VoiceMode.Virtual3D)
+						{
+							data[i * 2] *= Mathf.Clamp01(1.0f - listerAngleSin) * distanceFactor;
+							data[i * 2 + 1] *= Mathf.Clamp01(1.0f + listerAngleSin) * distanceFactor;
 						}
 					}
 				}

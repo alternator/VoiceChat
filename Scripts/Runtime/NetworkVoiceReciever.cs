@@ -49,12 +49,16 @@ namespace ICKX.VoiceChat {
 				float maxVolume = stream.ReadFloat (ref ctx);
 
 				Vector3 senderPosition = default;
+				float maxDistance = 0.0f;
 				switch (mode) {
 					case VoiceMode.Default:
 						break;
 					case VoiceMode.DirectionOnly:
+						senderPosition = stream.ReadVector3(ref ctx);
+						break;
 					case VoiceMode.Virtual3D:
-						senderPosition = stream.ReadVector3 (ref ctx);
+						senderPosition = stream.ReadVector3(ref ctx);
+						maxDistance = stream.ReadFloat(ref ctx);
 						break;
 				}
                 long unixTime = stream.ReadLong(ref ctx);
@@ -77,7 +81,20 @@ namespace ICKX.VoiceChat {
 				}
 
 				source.CacheTransform.position = senderPosition;
-				source.OnRecievePacket (mode, rawDataCount, samplingFrequency, maxVolume, stream, ctx);
+				source.OnRecievePacket (mode, rawDataCount, samplingFrequency, maxVolume, maxDistance, stream, ctx);
+			}
+			else if(type == NetworkVoiceSender.VoiceUpdatePacketType)
+			{
+				ushort playerId = stream.ReadUShort(ref ctx);
+				long unixTime = stream.ReadLong(ref ctx);
+				Vector3 senderPosition = stream.ReadVector3(ref ctx);
+
+				if (!_NetworkVoiceSourceList.TryGetValue(playerId, out NetworkVoiceSource source))
+				{
+					source = CreateNetworkVoiceSource(playerId);
+					_NetworkVoiceSourceList[playerId] = source;
+				}
+				source.CacheTransform.position = senderPosition;
 			}
 		}
 
