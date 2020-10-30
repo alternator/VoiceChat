@@ -215,6 +215,22 @@ namespace ICKX.VoiceChat
 
 				_FilterVoiceBufferLastPos -= useRecieveVoiceDataSize;
 				if (_FilterVoiceBufferLastPos < 0) _FilterVoiceBufferLastPos = 0;
+
+				Debug.Log($"NetworkVoiceSource {_FilterVoiceBufferLastPos} {useRecieveVoiceDataSize * 100}");
+				//ボイスデータのパケットがたまりすぎた場合にクリアしたい
+				if (_FilterVoiceBufferLastPos > useRecieveVoiceDataSize * 30)
+				{
+					Debug.Log("NetworkVoiceSource ClearBuffer");
+					_FilterVoiceBufferLastPos = 0;
+				}
+			}
+		}
+
+		public void ClearVoiceBuffer()
+		{
+			lock (_FilterVoiceBuffer)
+			{
+				_FilterVoiceBufferLastPos = 0;
 			}
 		}
 	}
